@@ -14,41 +14,39 @@ public:
 
 class CANManager {
 public:
-    CANManager(CAN &can) : _can(can) {
-        // 受信割り込みを設定
+    CANManager(CAN &can) : 
+        _can(can), 
+        _queue(32 * EVENTS_EVENT_SIZE),
+        _rx_thread(osPriorityHigh) 
+    {
+        _rx_thread.start(callback(&_queue, &EventQueue::dispatch_forever));
         _can.attach(callback(this, &CANManager::on_can_interrupt), CAN::RxIrq);
     }
 
-    // 各ライブラリのインスタンスを登録
     void add_receiver(CANReceiver *receiver) {
         _receivers.push_back(receiver);
     }
 
-    // メインループや専用スレッドから定期的に呼び出す
-    void dispatch_all() {
+private:
+    void on_can_interrupt() {
+        _queue.call(callback(this, &CANManager::process_can_message));
+    }
+
+    void process_can_message() {
         CANMessage msg;
-        // キューに溜まっているメッセージを全て処理
-        while (_queue.pop(msg)) {
+        while (_can.read(msg)) {
             for (auto *receiver : _receivers) {
                 if (receiver->handle_message(msg)) {
-                    break; // 一つのライブラリが処理したら次へ（必要に応じて継続も可）
+                    break;
                 }
             }
         }
     }
-
-private:
-    // 割り込みハンドラ（ここではキューに入れるだけにするのが安全）
-    void on_can_interrupt() {
-        CANMessage msg;
-        while (_can.read(msg)) {
-            _queue.push(msg);
-        }
-    }
-
+    
     CAN &_can;
     std::vector<CANReceiver*> _receivers;
-    CircularBuffer<CANMessage, 32> _queue; // 割り込み安全なバッファ
+    EventQueue _queue;
+    Thread _rx_thread;
 };
 
 #endif
