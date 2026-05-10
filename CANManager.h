@@ -14,10 +14,10 @@ public:
 
 class CANManager {
 public:
-    CANManager(CAN &can) : 
+    CANManager(CAN &can,osPriority_t priority=osPriorityHigh) : 
         _can(can), 
         _queue(32 * EVENTS_EVENT_SIZE),
-        _rx_thread(osPriorityHigh) 
+        _rx_thread(priority) 
     {
         _rx_thread.start(callback(&_queue, &EventQueue::dispatch_forever));
         _can.attach(callback(this, &CANManager::on_can_interrupt), CAN::RxIrq);
